@@ -104,24 +104,25 @@ def dashboard():
 
     filter = request.args.get("filter") or "monat"
     jahr   = request.args.get("jahr")   or datetime.now().strftime("%Y")
-    monat  = datetime.now().strftime("%m")
 
-    if filter == "quartal1":
-        start, end = "01.01."+jahr, "31.03."+jahr
+    # Standardmonat nur für Filter "monat"
+    if filter == "monat":
+        monat  = datetime.now().strftime("%m")
+        start = f"01.{monat}.{jahr}"
+        end   = f"31.{monat}.{jahr}"
+    elif filter == "quartal1":
+        start, end = f"01.01.{jahr}", f"31.03.{jahr}"
     elif filter == "quartal2":
-        start, end = "01.04."+jahr, "30.06."+jahr
+        start, end = f"01.04.{jahr}", f"30.06.{jahr}"
     elif filter == "quartal3":
-        start, end = "01.07."+jahr, "30.09."+jahr
+        start, end = f"01.07.{jahr}", f"30.09.{jahr}"
     elif filter == "quartal4":
-        start, end = "01.10."+jahr, "31.12."+jahr
+        start, end = f"01.10.{jahr}", f"31.12.{jahr}"
     elif filter == "jahres":
-        start, end = "01.01."+jahr, "31.12."+jahr
+        start, end = f"01.01.{jahr}", f"31.12.{jahr}"
     elif filter == "custom":
         start = request.args.get("start") or datetime.now().strftime("%d.%m.%Y")
         end   = request.args.get("end")   or datetime.now().strftime("%d.%m.%Y")
-    else:
-        start = "01."+monat+"."+jahr
-        end   = "31."+monat+"."+jahr
 
     stats = []
     last_entries = []
@@ -141,21 +142,20 @@ def dashboard():
         dfF  = df[mask]
         stats.append([r, round(dfF["Total-Umsatz"].sum(), 2) if not dfF.empty else 0])
 
-        # letzte Schichteingabe
+        # Letzte Zeile
         if not df.empty:
             ls = df.sort_values("Datum", ascending=False).iloc[0]
             last_entries.append((r, ls["Datum"].strftime("%d.%m.%Y"), ls["Total-Umsatz"]))
         else:
             last_entries.append((r, "-", 0))
 
-        # Monatswerte Januar–Dezember (für Linienchart)
-        for m in range(1, 13):
-            st = f"01.{m:02d}.{jahr}"
-            ld = calendar.monthrange(int(jahr), m)[1]
-            en = f"{ld:02d}.{m:02d}.{jahr}"
-            msk = (df['Datum'] >= pd.to_datetime(st, dayfirst=True)) & (df['Datum'] <= pd.to_datetime(en, dayfirst=True))
-            sub = df[msk]
-            monthly[r][m-1] = round(sub["Total-Umsatz"].sum(), 2) if not sub.empty else 0
+        # Monatswerte für Linienchart (immer bezogen auf ausgewähltes Jahr!)
+        for m in range(1,13):
+            start_m = f"01.{m:02d}.{jahr}"
+            last_day = calendar.monthrange(int(jahr), m)[1]
+            end_m = f"{last_day:02d}.{m:02d}.{jahr}"
+            sub = df[(df['Datum']>=pd.to_datetime(start_m,dayfirst=True)) & (df['Datum']<=pd.to_datetime(end_m,dayfirst=True))]
+            monthly[r][m-1] = round(sub["Total-Umsatz"].sum(),2) if not sub.empty else 0
 
     gesamt = sum([row[1] for row in stats])
     jahresliste = [str(y) for y in range(2023, 2031)]

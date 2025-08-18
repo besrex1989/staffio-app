@@ -14,6 +14,7 @@
       let ids=['küche','wein','bier','mineral','heissgetränke','spirituosen','patisserie','anderes'];
       let t=0; ids.forEach(f=>{t+=parseFloat(document.getElementsByName(f)[0].value)||0;});
       document.getElementById('totalDisplay').innerText=t.toFixed(2);
+      document.getElementById('totalHidden').value = t.toFixed(2);   // <-- Wert ans Backend senden
       updateRest();
     }
     function updateRest(){
@@ -65,6 +66,9 @@
         </div>
         {% endfor %}
       </div>
+
+      <!-- Hidden total for backend -->
+      <input type="hidden" name="total" id="totalHidden" value="0.00">
 
       <div class="mb-2"><strong>Total-Umsatz:</strong> <span id="totalDisplay">0.00</span> CHF
         &nbsp; <small class="text-muted">(Rest: <span id="restDisplay">0.00</span> CHF)</small>

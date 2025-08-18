@@ -18,42 +18,45 @@
     </div>
   </div>
 
+  <!-- FILTER -->
   <form class="row mb-3" method="get" action="/dashboard">
-  <div class="col-md-3">
-    <label>Jahr wählen</label>
-    <select class="form-select" name="jahr">
-      {% for j in jahre %}
-        <option value="{{j}}" {% if jahr_selected == j %}selected{% endif %}>{{j}}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="col-md-3">
-    <label>Zeitraum</label>
-    <select class="form-select" name="filter" onchange="this.form.submit()">
-      <option value="monat"     {% if filter=='monat' %}selected{% endif %}>Aktueller Monat</option>
-      <option value="jahres"    {% if filter=='jahres' %}selected{% endif %}>Laufendes Jahr</option>
-      <option value="quartal1"  {% if filter=='quartal1' %}selected{% endif %}>1. Quartal</option>
-      <option value="quartal2"  {% if filter=='quartal2' %}selected{% endif %}>2. Quartal</option>
-      <option value="quartal3"  {% if filter=='quartal3' %}selected{% endif %}>3. Quartal</option>
-      <option value="quartal4"  {% if filter=='quartal4' %}selected{% endif %}>4. Quartal</option>
-      <option value="custom"    {% if filter=='custom' %}selected{% endif %}>Benutzerdefiniert</option>
-    </select>
-  </div>
+    <div class="col-md-3">
+      <label>Jahr wählen</label>
+      <select class="form-select" name="jahr">
+        {% for j in jahre %}
+          <option value="{{j}}" {% if jahr_selected == j %}selected{% endif %}>{{j}}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label>Zeitraum</label>
+      <select class="form-select" name="filter" onchange="this.form.submit()">
+        <option value="monat"     {% if filter=='monat' %}selected{% endif %}>Aktueller Monat</option>
+        <option value="jahres"    {% if filter=='jahres' %}selected{% endif %}>Laufendes Jahr</option>
+        <option value="quartal1"  {% if filter=='quartal1' %}selected{% endif %}>1. Quartal</option>
+        <option value="quartal2"  {% if filter=='quartal2' %}selected{% endif %}>2. Quartal</option>
+        <option value="quartal3"  {% if filter=='quartal3' %}selected{% endif %}>3. Quartal</option>
+        <option value="quartal4"  {% if filter=='quartal4' %}selected{% endif %}>4. Quartal</option>
+        <option value="custom"    {% if filter=='custom' %}selected{% endif %}>Benutzerdefiniert</option>
+      </select>
+    </div>
 
-  {% if filter=='custom' %}
-  <div class="col-md-3">
-    <label>von</label>
-    <input name="start" class="form-control" value="{{start}}" placeholder="dd.mm.yyyy">
-  </div>
-  <div class="col-md-3">
-    <label>bis</label>
-    <input name="end" class="form-control" value="{{end}}" placeholder="dd.mm.yyyy">
-  </div>
-  <div class="col-md-12 mt-2">
-    <button class="btn btn-primary" type="submit">Filtern</button>
-  </div>
-  {% endif %}
-</form>
+    {% if filter=='custom' %}
+    <div class="col-md-3">
+      <label>von</label>
+      <input name="start" class="form-control" value="{{start}}" placeholder="dd.mm.yyyy">
+    </div>
+    <div class="col-md-3">
+      <label>bis</label>
+      <input name="end" class="form-control" value="{{end}}" placeholder="dd.mm.yyyy">
+    </div>
+    <div class="col-md-12 mt-2">
+      <button class="btn btn-primary" type="submit">Filtern</button>
+    </div>
+    {% endif %}
+  </form>
+
+  <!-- KARTEN -->
   <div class="row g-3">
     {% for row in stats %}
     <div class="col-md-4">
@@ -68,6 +71,7 @@
     </div>
   </div>
 
+  <!-- ADMIN BEREICH -->
   {% if user == 'admin_sebastiano' %}
   <hr class="mt-4">
 
@@ -90,48 +94,32 @@
 
 </div>
 
-<script>
-function applyFilter(){
-  const year=document.getElementById('jahrSel').value;
-  const filter=document.getElementById('filter').value;
-
-  // Wenn custom gewählt wurde und noch keine Felder sichtbar sind -> neu laden
-  if(filter==='custom' && !document.getElementById('s')){
-     window.location.href='/dashboard?jahr='+year+'&filter=custom';
-     return;
-  }
-
-  let url='/dashboard?jahr='+year+'&filter='+filter;
-  if(filter==='custom'){
-    url+='&start='+document.getElementById('s').value+'&end='+document.getElementById('e').value;
-  }
-  window.location.href=url;
-}
-
 {% if user == 'admin_sebastiano' %}
- const labelsBar={{ stats|map(attribute=0)|list }};
- const dataBar  ={{ stats|map(attribute=1)|list }};
- new Chart(document.getElementById('barChart'),{
-   type:'bar',
-   data:{labels:labelsBar,datasets:[{data:dataBar,backgroundColor:'#4e73df'}]},
-   options:{indexAxis:'y',plugins:{legend:{display:false}}}
- });
+<script>
+  // Balkenchart
+  const labelsBar  = {{ stats|map(attribute=0)|list }};
+  const dataBar    = {{ stats|map(attribute=1)|list }};
+  new Chart(document.getElementById('barChart'),{
+    type:'bar',
+    data:{labels:labelsBar,datasets:[{data:dataBar,backgroundColor:'#4e73df'}]},
+    options:{indexAxis:'y',plugins:{legend:{display:false}}}
+  });
 
- const months=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
- const monatData={{ monthly }};
- const farben=['#4e73df','#e74a3b','#1cc88a','#f6c23e','#8e44ad'];
- let ds=[],i=0;
-
- for(const r in monatData){
-   ds.push({label:r,data:monatData[r],borderColor:farben[i%farben.length],fill:false,tension:0.25});
-   i++;
- }
- new Chart(document.getElementById('lineChart'),{
-   type:'line',
-   data:{labels:months,datasets:ds},
-   options:{plugins:{legend:{position:'bottom'}}}
- });
-{% endif %}
+  // Linienchart
+  const months=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+  const monatData={{ monthly }};
+  const farben=['#4e73df','#e74a3b','#1cc88a','#f6c23e','#8e44ad'];
+  let ds=[],i=0;
+  for(const r in monatData){
+    ds.push({label:r,data:monatData[r],borderColor:farben[i%farben.length],fill:false,tension:0.25});
+    i++;
+  }
+  new Chart(document.getElementById('lineChart'),{
+    type:'line',
+    data:{labels:months,datasets:ds},
+    options:{plugins:{legend:{position:'bottom'}}}
+  });
 </script>
+{% endif %}
 </body>
 </html>

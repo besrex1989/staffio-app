@@ -1,115 +1,151 @@
-from flask import Flask, request, render_template, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session
 from datetime import datetime
-import openpyxl, os, calendar, pandas as pd
+import sqlite3
+import os
 
 app = Flask(__name__)
 app.secret_key = "geheim123"
-UPLOAD_FOLDER = 'uploads'
+
+DB_FILE = "umsatz.db"
+
+# ================= DB Initialisierung ======================================
+
+def init_db():
+    if not os.path.exists(DB_FILE):
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("""
+            CREATE TABLE umsatz (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                restaurant TEXT,
+                datum TEXT,
+                total REAL,
+                bar REAL,
+                kartenterminal REAL,
+                twint REAL,
+                amex REAL,
+                debitoren REAL,
+                eatch REAL,
+                reka REAL,
+                sonstige REAL,
+                user TEXT
+            )
+        """)
+        conn.commit()
+        conn.close()
+
+init_db()
+
+# ================= Benutzer ===============================================
 
 USERS = {
     "admin_sebastiano": {"password": "admin!2025", "role": "super", "restaurant": None},
-    "La_Vita":          {"password": "1234",       "role": "input","restaurant": "Restaurant La Vita"},
-    "La_Gioia":         {"password": "1234",       "role": "input","restaurant": "Restaurant La Gioia"},
-    "Celina":           {"password": "1234",       "role": "input","restaurant": "Restaurant Celina"},
-    "Lido":             {"password": "1234",       "role": "input","restaurant": "Restaurant Lido"},
-    "Da_Vito":          {"password": "1234",       "role": "input","restaurant": "Restaurant da Vito"}
+    "La_Vita": {"password": "1234", "role": "input", "restaurant": "Restaurant La Vita"},
+    "La_Gioia": {"password": "1234", "role": "input", "restaurant": "Restaurant La Gioia"},
+    "Celina": {"password": "1234", "role": "input", "restaurant": "Restaurant Celina"},
+    "Lido": {"password": "1234", "role": "input", "restaurant": "Restaurant Lido"},
+    "Da_Vito": {"password": "1234", "role": "input", "restaurant": "Restaurant da Vito"},
 }
 
-EXCEL_MAP = {
-    "Restaurant La Vita": "umsatz_restaurant_la_vita.xlsx",
-    "Restaurant La Gioia": "umsatz_restaurant_la_gioia.xlsx",
-    "Restaurant Celina": "umsatz_restaurant_celina.xlsx",
-    "Restaurant Lido": "umsatz_restaurant_lido.xlsx",
-    "Restaurant da Vito": "umsatz_restaurant_da_vito.xlsx"
-}
+RESTAURANTS = [
+    "Restaurant La Vita",
+    "Restaurant La Gioia",
+    "Restaurant Celina",
+    "Restaurant Lido",
+    "Restaurant da Vito"
+]
 
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
 
-# LOGIN ------------------------------------------------------------------------
-@app.route('/', methods=['GET', 'POST'])
+@app.route("/", methods=["GET", "POST"])
 def login():
-    if request.method == 'POST':
+    if request.method == "POST":
         u = request.form.get("username")
         p = request.form.get("password")
         if u in USERS and USERS[u]["password"] == p:
-            session['logged_in'] = True
-            session['user'] = u
-            session['role'] = USERS[u]["role"]
-            session['restaurant'] = USERS[u]["restaurant"]
-            return redirect(url_for('dashboard'))
-        return render_template('login.html', error="Falscher Login")
-    return render_template('login.html')
+            session["logged_in"] = True
+            session["user"] = u
+            session["role"] = USERS[u]["role"]
+            session["restaurant"] = USERS[u]["restaurant"]
+            return redirect(url_for("dashboard"))
+        return render_template("login.html", error="Falscher Login")
+    return render_template("login.html")
 
-@app.route('/logout')
+
+@app.route("/logout")
 def logout():
     session.clear()
-    return redirect(url_for('login'))
+    return redirect(url_for("login"))
 
-# FORM ------------------------------------------------------------------------
-@app.route('/form', methods=['GET','POST'])
+
+# ====================== Formular ==========================================
+
+@app.route("/form", methods=["GET", "POST"])
 def form():
-    if not session.get('logged_in'):
-        return redirect(url_for('login'))
+    if not session.get("logged_in"):
+        return redirect(url_for("login"))
 
-    user  = session.get("user")
-    role  = session.get("role")
-    rfix  = session.get("restaurant")
+    role = session.get("role")
+    user = session.get("user")
+    rfix = session.get("restaurant")
 
-    restaurants = [rfix] if role=="input" else list(EXCEL_MAP.keys())
+    restaurants = RESTAURANTS if role == "super" else [rfix]
 
-    if request.method == 'POST':
+    if request.method == "POST":
         rest = request.form["restaurant"]
-        excel_file = EXCEL_MAP[rest]
         now = datetime.now()
         datum = now.strftime("%d.%m.%Y")
-        zeit  = now.strftime("%H:%M")
-        username = session.get("user")
 
-        uf=['küche','wein','bier','mineral','heissgetränke','spirituosen','patisserie','anderes']
-        pf=['bar','kartenterminal','twint','amex','debitoren','eatch','reka','sonstige']
+        # Umsatzfelder
+        total = float(request.form.get("total") or 0)
+        bar = float(request.form.get("bar") or 0)
+        kart = float(request.form.get("kartenterminal") or 0)
+        twint = float(request.form.get("twint") or 0)
+        amex = float(request.form.get("amex") or 0)
+        deb = float(request.form.get("debitoren") or 0)
+        eatch = float(request.form.get("eatch") or 0)
+        reka = float(request.form.get("reka") or 0)
+        sonst = float(request.form.get("sonstige") or 0)
 
-        uv=[float(request.form.get(f) or 0) for f in uf]
-        total=sum(uv)
-        zv=[float(request.form.get(f) or 0) for f in pf]
+        if round(bar+kart+twint+amex+deb+eatch+reka+sonst,2) != round(total,2):
+            return "Fehler bei Zahlungsarten"
 
-        if round(sum(zv),2)!=round(total,2):
-            return "Zahlungsarten stimmen nicht! <a href='/form'>Zurück</a>"
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("""
+         INSERT INTO umsatz (restaurant, datum, total, bar, kartenterminal, twint, amex, debitoren, eatch, reka, sonstige, user)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+        """, (rest, datum, total, bar, kart, twint, amex, deb, eatch, reka, sonst, user))
+        conn.commit()
+        conn.close()
 
-        files = request.files.getlist("fotos")
-        c=1
-        for f in files:
-            if f and f.filename:
-                name=f"{datum}_{zeit.replace(':','-')}_{c}_{rest.replace(' ','_')}.jpg"
-                f.save(os.path.join(UPLOAD_FOLDER,name)); c+=1
+        return redirect(url_for("dashboard"))
 
-        row=[datum,zeit]+uv+[total]+zv+[username]
-        wb=openpyxl.load_workbook(excel_file); ws=wb.active
-        ws.append(row); wb.save(excel_file)
-        return redirect(url_for('dashboard'))
+    return render_template("form.html", restaurants=restaurants, user=user)
 
-    return render_template('form.html',restaurants=restaurants,user=user)
 
-# DASHBOARD -------------------------------------------------------------------
-@app.route('/dashboard')
+# ======================= Dashboard =========================================
+
+@app.route("/dashboard")
 def dashboard():
     import pandas as pd
     import calendar
 
-    if not session.get('logged_in'):
-        return redirect(url_for('login'))
+    if not session.get("logged_in"):
+        return redirect(url_for("login"))
 
     user = session.get("user")
     role = session.get("role")
 
+    # Filter
     filter = request.args.get("filter") or "monat"
-    jahr   = request.args.get("jahr")   or datetime.now().strftime("%Y")
+    jahr = request.args.get("jahr") or datetime.now().strftime("%Y")
+    monat = datetime.now().strftime("%m")
 
-    # Standardmonat nur für Filter "monat"
     if filter == "monat":
-        monat  = datetime.now().strftime("%m")
         start = f"01.{monat}.{jahr}"
-        end   = f"31.{monat}.{jahr}"
+        end = f"31.{monat}.{jahr}"
+    elif filter == "jahres":
+        start, end = f"01.01.{jahr}", f"31.12.{jahr}"
     elif filter == "quartal1":
         start, end = f"01.01.{jahr}", f"31.03.{jahr}"
     elif filter == "quartal2":
@@ -118,61 +154,57 @@ def dashboard():
         start, end = f"01.07.{jahr}", f"30.09.{jahr}"
     elif filter == "quartal4":
         start, end = f"01.10.{jahr}", f"31.12.{jahr}"
-    elif filter == "jahres":
-        start, end = f"01.01.{jahr}", f"31.12.{jahr}"
     elif filter == "custom":
         start = request.args.get("start") or datetime.now().strftime("%d.%m.%Y")
-        end   = request.args.get("end")   or datetime.now().strftime("%d.%m.%Y")
+        end = request.args.get("end") or datetime.now().strftime("%d.%m.%Y")
+
+    # Daten laden
+    conn = sqlite3.connect(DB_FILE)
+    df = pd.read_sql_query("SELECT * FROM umsatz", conn)
+    conn.close()
+
+    df["Datum"] = pd.to_datetime(df["datum"], format="%d.%m.%Y")
 
     stats = []
     last_entries = []
-    monthly = {r: [0]*12 for r in EXCEL_MAP.keys()}
+    monthly = {r: [0]*12 for r in RESTAURANTS}
 
-    for r, f in EXCEL_MAP.items():
+    for r in RESTAURANTS:
         if role == "input" and session.get("restaurant") != r:
             continue
-        if not os.path.exists(f):
-            continue
 
-        df = pd.read_excel(f)
-        df['Datum'] = pd.to_datetime(df['Datum'], format="%d.%m.%Y")
+        df_r = df[df["restaurant"] == r]
 
         # Zeitraum-Summe
-        mask = (df['Datum'] >= pd.to_datetime(start, dayfirst=True)) & (df['Datum'] <= pd.to_datetime(end, dayfirst=True))
-        dfF  = df[mask]
-        stats.append([r, round(dfF["Total-Umsatz"].sum(), 2) if not dfF.empty else 0])
+        mask = (df_r["Datum"] >= pd.to_datetime(start, dayfirst=True)) & (df_r["Datum"] <= pd.to_datetime(end, dayfirst=True))
+        dfF = df_r[mask]
+        total_summe = round(dfF["total"].sum(), 2) if not dfF.empty else 0
+        stats.append([r, total_summe])
 
-        # Letzte Zeile
-        if not df.empty:
-            ls = df.sort_values("Datum", ascending=False).iloc[0]
-            last_entries.append((r, ls["Datum"].strftime("%d.%m.%Y"), ls["Total-Umsatz"]))
+        # letztes Datum
+        if not df_r.empty:
+            l = df_r.sort_values("Datum", ascending=False).iloc[0]
+            last_entries.append((r, l["datum"], l["total"]))
         else:
             last_entries.append((r, "-", 0))
 
-        # Monatswerte für Linienchart (immer bezogen auf ausgewähltes Jahr!)
-        for m in range(1,13):
-            start_m = f"01.{m:02d}.{jahr}"
-            last_day = calendar.monthrange(int(jahr), m)[1]
-            end_m = f"{last_day:02d}.{m:02d}.{jahr}"
-            sub = df[(df['Datum']>=pd.to_datetime(start_m,dayfirst=True)) & (df['Datum']<=pd.to_datetime(end_m,dayfirst=True))]
-            monthly[r][m-1] = round(sub["Total-Umsatz"].sum(),2) if not sub.empty else 0
+        # Monatsentwicklung
+        for m in range(1, 12+1):
+            st = f"01.{m:02d}.{jahr}"
+            ld = calendar.monthrange(int(jahr), m)[1]
+            en = f"{ld:02d}.{m:02d}.{jahr}"
+            sub = df_r[(df_r["Datum"] >= pd.to_datetime(st, dayfirst=True)) & (df_r["Datum"] <= pd.to_datetime(en, dayfirst=True))]
+            monthly[r][m-1] = round(sub["total"].sum(), 2) if not sub.empty else 0
 
     gesamt = sum([row[1] for row in stats])
     jahresliste = [str(y) for y in range(2023, 2031)]
 
-    return render_template("dashboard.html",
-                           user=user,
-                           stats=stats,
-                           gesamt=gesamt,
-                           filter=filter,
-                           jahr_selected=jahr,
-                           start=start,
-                           end=end,
-                           jahre=jahresliste,
-                           last_entries=last_entries,
-                           monthly=monthly)
+    return render_template("dashboard.html", stats=stats, gesamt=gesamt,
+                           year=jahr, filter=filter, jahre=jahresliste,
+                           jahr_selected=jahr, start=start, end=end,
+                           user=user, last_entries=last_entries, monthly=monthly)
 
-# -----------------------------------------------------------------------------
-import os
-port = int(os.environ.get("PORT", 10000))
-app.run(host="0.0.0.0", port=port)
+# ================= MAIN ====================================================
+
+if __name__ == "__main__":
+    app.run(debug=True)
